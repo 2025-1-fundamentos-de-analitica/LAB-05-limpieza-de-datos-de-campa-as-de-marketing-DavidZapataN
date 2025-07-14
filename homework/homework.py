@@ -49,7 +49,73 @@ def clean_campaign_data():
 
 
     """
+    import os
+    import zipfile
+    import pandas as pd
+    import glob
 
+    os.makedirs("files/output", exist_ok=True)
+    
+    lista_datos = []
+    
+    archivos_zip = glob.glob("files/input/*.csv.zip")
+    archivos_zip.sort()
+    
+    # Leer todos los archivos ZIP
+    for archivo_zip in archivos_zip:
+        with zipfile.ZipFile(archivo_zip, 'r') as zip_abierto:
+            nombre_csv = zip_abierto.namelist()[0]
+            with zip_abierto.open(nombre_csv) as archivo_csv:
+                datos = pd.read_csv(archivo_csv)
+                lista_datos.append(datos)
+    
+    datos_combinados = pd.concat(lista_datos, ignore_index=True)
+    
+    if 'Unnamed: 0' in datos_combinados.columns:
+        datos_combinados = datos_combinados.drop('Unnamed: 0', axis=1)
+    
+    datos_combinados['client_id'] = datos_combinados.index
+    
+    # Client data
+    columnas_cliente = ['client_id', 'age', 'job', 'marital', 'education', 'credit_default', 'mortgage']
+    datos_cliente = datos_combinados[columnas_cliente].copy()
+    
+    datos_cliente['job'] = datos_cliente['job'].str.replace('.', '', regex=False)
+    datos_cliente['job'] = datos_cliente['job'].str.replace('-', '_', regex=False)
+    
+    datos_cliente['education'] = datos_cliente['education'].str.replace('.', '_', regex=False)
+    datos_cliente['education'] = datos_cliente['education'].replace('unknown', pd.NA)
+    
+    datos_cliente['credit_default'] = (datos_cliente['credit_default'] == 'yes').astype(int)
+    datos_cliente['mortgage'] = (datos_cliente['mortgage'] == 'yes').astype(int)
+    
+    # Campaign data
+    columnas_campana = ['client_id', 'number_contacts', 'contact_duration', 
+                       'previous_campaign_contacts', 'previous_outcome', 
+                       'campaign_outcome', 'day', 'month']
+    datos_campana = datos_combinados[columnas_campana].copy()
+    
+    datos_campana['previous_outcome'] = (datos_campana['previous_outcome'] == 'success').astype(int)
+    datos_campana['campaign_outcome'] = (datos_campana['campaign_outcome'] == 'yes').astype(int)
+    
+    # Crear fecha
+    datos_campana['last_contact_date'] = pd.to_datetime(
+        datos_campana['day'].astype(str) + '-' + 
+        datos_campana['month'].astype(str) + '-2022', 
+        format='%d-%b-%Y'
+    ).dt.strftime('%Y-%m-%d')
+    
+    datos_campana = datos_campana.drop(['day', 'month'], axis=1)
+    
+    # Economics data
+    columnas_economia = ['client_id', 'cons_price_idx', 'euribor_three_months']
+    datos_economia = datos_combinados[columnas_economia].copy()
+    
+    # Guardar archivos
+    datos_cliente.to_csv("files/output/client.csv", index=False)
+    datos_campana.to_csv("files/output/campaign.csv", index=False)
+    datos_economia.to_csv("files/output/economics.csv", index=False)
+    
     return
 
 
